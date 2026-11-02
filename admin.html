@@ -1,0 +1,31 @@
+<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Consolidado PQRS</title><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+body{margin:0;font:13px Arial,sans-serif;background:#eef3f8;color:#1b1f24}header{position:sticky;left:0;display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:12px 16px;background:#1f3b5c;color:#fff}
+h1{font-size:16px;margin:0;flex:1}input,select{padding:6px;border-radius:4px;border:1px solid #b9c7d6}a.b{background:#fff;color:#1f3b5c;padding:7px 14px;border-radius:4px;text-decoration:none;font-weight:bold}
+.t{overflow:auto;max-height:calc(100vh - 62px)}table{border-collapse:collapse;min-width:2000px;background:#fff}th{position:sticky;top:0;background:#d8e8ff;color:#0c3b76;font-size:11px;text-transform:uppercase;padding:8px;border:1px solid #b8cfe9;z-index:1}
+td{border:1px solid #d8e2ee;padding:6px 8px;vertical-align:top;white-space:pre-wrap;max-width:300px;word-break:break-word}tr:hover td{background:#f6faff}.A{color:#b26a00;font-weight:bold}.C{color:#137333;font-weight:bold}td select{width:100%}
+</style></head><body><header><h1>CONSOLIDADO DE QUEJAS, RECLAMOS Y SUGERENCIAS</h1><input id="s" placeholder="Buscar…"><select id="f"><option value="">Todos</option><option>Abierto</option><option>Cerrado</option></select><span id="n"></span><a class="b" href="/admin/excel">Descargar Excel</a></header>
+<div class="t"><table><thead><tr id="h"></tr></thead><tbody id="b"></tbody></table></div>
+<script>
+var C=[["No","no"],["Fecha","fecha"],["Tipo","tipo"],["Nombre del cliente","cliente"],["Proceso responsable","proceso"],["Descripción de la PQRS","descripcion"],["Primer contacto con el cliente","contacto"],["Investigación / causas probables","investigacion"],["Procedente","procedente"],["Solución de la PQRS (acciones ejecutadas)","solucion"],["Fecha de solución","fechaSol"],["Estado","estado"],["Calificación de la gestión","cal"],["Requiere acción","acc"],["Tiempo de solución (días)","dias"],["Trazabilidad","link"]];
+var OP={cal:["","Excelente","Buena","Regular","Mala"],acc:["","Ninguna","Correctiva","Preventiva"]},D=[];
+var E=function(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})};
+document.getElementById("h").innerHTML=C.map(function(c){return"<th>"+c[0]+"</th>"}).join("");
+function cell(r,k){var v=r[k];
+ if(k=="fecha")return v?new Date(v).toLocaleString("es-CO"):"";
+ if(k=="estado")return'<span class="'+v[0]+'">'+v+'</span>'+(r.pdf?' · <a href="'+E(r.pdf)+'" target="_blank">PDF</a>':'');
+ if(k=="link")return'<a href="'+E(v)+'" target="_blank">Abrir</a>';
+ if(OP[k])return'<select data-i="'+r.id+'" data-k="'+k+'">'+OP[k].map(function(o){return'<option'+(o==v?" selected":"")+'>'+o+'</option>'}).join("")+'</select>';
+ return E(v)}
+function draw(){var q=document.getElementById("s").value.toLowerCase(),f=document.getElementById("f").value;
+ var R=D.filter(function(r){return(!f||r.estado==f)&&(!q||JSON.stringify(r).toLowerCase().indexOf(q)>=0)});
+ document.getElementById("n").textContent=R.length+" PQRS";
+ document.getElementById("b").innerHTML=R.slice().reverse().map(function(r){return"<tr>"+C.map(function(c){return"<td>"+cell(r,c[1])+"</td>"}).join("")+"</tr>"}).join("")}
+function load(){if(document.activeElement&&document.activeElement.tagName=="SELECT"&&document.activeElement.dataset.k)return;
+ fetch("/admin/data").then(function(r){return r.json()}).then(function(d){D=d;draw()})}
+document.getElementById("s").oninput=draw;document.getElementById("f").onchange=draw;
+document.getElementById("b").onchange=function(e){var t=e.target;if(!t.dataset.k)return;
+ fetch("/admin/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:t.dataset.i,k:t.dataset.k,v:t.value})});
+ D.forEach(function(r){if(r.id==t.dataset.i)r[t.dataset.k]=t.value})};
+load();setInterval(load,20000);
+</script></body></html>

@@ -1,0 +1,77 @@
+<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Reporte de PQRS</title><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+body{margin:0;background:#eef3f8;font:15px/1.4 Arial,Helvetica,sans-serif;color:#1b1f24}#w{max-width:720px;margin:0 auto;padding:12px}
+.c{background:#fff;border:1px solid #d6e1ed;border-radius:8px;padding:18px;margin-bottom:12px;animation:f .35s}@keyframes f{from{opacity:0;transform:translateY(10px)}}
+h2{font-size:17px;margin:0 0 6px;color:#1f3b5c}.d{color:#4f6576;margin:0 0 14px;font-size:13px}.q{margin:0 0 16px}.q>label{display:block;font-weight:600;margin-bottom:6px}.q b{color:#c5221f}
+input[type=text],input[type=email],input[type=date],input[type=password],textarea{width:100%;box-sizing:border-box;padding:8px;border:1px solid #b9c7d6;border-radius:4px;font:inherit}
+.o{display:block;font-weight:400;margin:4px 0}button{background:#1f3b5c;color:#fff;border:0;border-radius:4px;padding:11px 24px;font:inherit;cursor:pointer}button:disabled{opacity:.5}
+.n{display:flex;justify-content:space-between;align-items:center;margin-bottom:40px}.e{color:#c5221f;margin:8px 0}#st{font-size:12px;color:#4f6576}
+.lk{background:#f3f8ff;border:1px solid #d8e2ee;border-radius:6px;padding:8px;font-size:12px;word-break:break-all;margin-bottom:12px}.x{color:#c5221f;cursor:pointer;margin-left:8px}.bad{outline:2px solid #c5221f}
+</style></head><body><div id="w"><div id="gate"></div><div id="lk" class="lk" style="display:none"></div><div id="box"></div>
+<div id="fin" style="display:none"><div class="e" id="er"></div><div class="n"><span id="st"></span><button id="nx">Enviar PQRS</button></div></div></div>
+<script>
+var S,R=(function(m){return m?m[1].toUpperCase():new URLSearchParams(location.search).get("r")||""})(/^\/(pqrs-\d+)\/?$/i.exec(location.pathname)),A={},COD="",PART=1,pend={},tm,ACT;
+var $=function(i){return document.getElementById(i)},E=function(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})};
+function rpc(f){var a=[].slice.call(arguments,1);return fetch("/api/"+f,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(a)}).then(function(r){return r.json().then(function(j){if(!r.ok)throw new Error(j.error);return j})})}
+function sec(n){return S.secs.filter(function(s){return s.n==n})[0]}
+function allQ(){var a=[];S.secs.forEach(function(s){a=a.concat(s.qs)});return a}
+function qOf(c){return allQ().filter(function(q){return q.c==c})[0]}
+function key(k,j){return(k<=4||(k==5&&j<4))?42+5*(k-1)+j:"x"+k+"_"+j}
+function actSec(k){return{id:"a"+k,title:"SOLUCIÓN · ACCIÓN "+k,desc:"",qs:ACT.map(function(q,j){return Object.assign({},q,{c:key(k,j),req:j==4?1:q.req})})}}
+// Siguiente seccion segun lo respondido (null = falta responder una pregunta que decide la ruta)
+function nxt(s){for(var i=0;i<s.qs.length;i++){var q=s.qs[i];if(q.go){var a=A[q.c];if(!a)return null;if(q.go[a]!==undefined)return q.go[a]}}
+ return s.after!=null?s.after:(s.n<22?s.n+1:"END")}
+// Ruta completa visible: se alarga sola a medida que se responde
+function path(n){var P=[],g=0;while(n!=="END"&&n!=null&&g++<300){var s=sec(n);
+ if(s.loop){for(var k=1;k<200;k++){P.push(actSec(k));var a=A[key(k,4)];if(a=="SI")break;if(a!="NO")return{P:P,end:false}}n=s.after;continue}
+ P.push(s);n=nxt(s)}return{P:P,end:n==="END"}}
+function fl(q){return(A[q.c]||"").split(", ").filter(Boolean).map(function(x,i){return'<div><a href="'+E(x)+'" target="_blank">Archivo '+(i+1)+'</a><span class="x" data-rm="'+q.c+':'+i+'">&#10005;</span></div>'}).join("")}
+function qh(q){var v=A[q.c]||"",id="q"+q.c,h='<div class="q" id="w'+q.c+'"><label>'+E(q.title)+(q.req?' <b>*</b>':'')+'</label>';
+ if(q.t=="t")h+='<input id="'+id+'" type="'+(/^Correo/.test(q.title)?"email":"text")+'" value="'+E(v)+'">';
+ else if(q.t=="p")h+='<textarea id="'+id+'" rows="4">'+E(v)+'</textarea>';
+ else if(q.t=="d")h+='<input id="'+id+'" type="date" value="'+E(v)+'">';
+ else if(q.t=="r")q.o.forEach(function(o){h+='<label class="o"><input type="radio" name="'+id+'" value="'+E(o)+'"'+(v==o?" checked":"")+'> '+E(o)+'</label>'});
+ else h+='<input type="file" id="'+id+'" multiple><div id="fl'+q.c+'">'+fl(q)+'</div>';
+ return h+'</div>'}
+var shown=[];
+function sync(init){var r=path(PART==1?1:8),box=$("box"),keep={},first=null;
+ r.P.forEach(function(s){var id=s.id||"s"+s.n;keep[id]=1;var el=$(id);
+  if(!el){el=document.createElement("div");el.className="c";el.id=id;el.innerHTML='<h2>'+E(s.title)+'</h2>'+(s.desc?'<p class="d">'+E(s.desc)+'</p>':'')+s.qs.map(qh).join("");if(!first)first=el}
+  box.appendChild(el)});
+ [].slice.call(box.children).forEach(function(el){if(!keep[el.id])box.removeChild(el)});
+ shown=r.P;$("fin").style.display=r.end?"block":"none";
+ if(init)box.lastChild&&box.lastChild.scrollIntoView();else if(first)first.scrollIntoView({behavior:"smooth",block:"start"})}
+function st(t){$("st").textContent=t}
+function cc(x){return/^\d+$/.test(x)?+x:x}
+function q_(c){pend[c]=1;clearTimeout(tm);st("Guardando…");tm=setTimeout(flush,600)}
+function flush(){clearTimeout(tm);var ks=Object.keys(pend);pend={};if(!ks.length)return Promise.resolve();
+ return ks.reduce(function(p,c){return p.then(function(){return rpc("api_guardar",R,COD,cc(c),A[c]||"")})},Promise.resolve())
+ .then(function(){st("Guardado ✓")},function(){ks.forEach(function(c){pend[c]=1});st("Sin conexión: reintentando…");tm=setTimeout(flush,3000)})}
+$("box").addEventListener("input",function(e){var t=e.target,m=/^q(.+)$/.exec(t.id||t.name||"");if(!m||t.type=="file")return;var c=m[1];A[c]=t.value;
+ if(PART==2)q_(c);if(t.type=="radio")sync()});
+$("box").addEventListener("change",function(e){var t=e.target;
+ if(t.type!="file"){var m=/^q(.+)$/.exec(t.id||t.name||"");if(m&&PART==2){var c=m[1];A[c]=t.value;q_(c);flush()}return}
+ var c=t.id.slice(1),q=qOf(c),ch=Promise.resolve();
+ [].slice.call(t.files).forEach(function(f){ch=ch.then(function(){var n=(A[c]||"").split(", ").filter(Boolean).length;if(n>=q.max)throw"Máximo "+q.max+" archivo(s)";st("Subiendo "+f.name+"…");
+  return new Promise(function(ok,ko){var r=new FileReader;r.onload=function(){ok(r.result.split(",")[1])};r.onerror=ko;r.readAsDataURL(f)})})
+  .then(function(b){return rpc("api_subir",f.name,f.type,b)}).then(function(u){A[c]=(A[c]?A[c]+", ":"")+u;$("fl"+c).innerHTML=fl(q);if(PART==2)q_(c)})});
+ ch.then(function(){t.value="";st("")},function(x){t.value="";$("er").textContent=String(x.message||x)})});
+$("box").addEventListener("click",function(e){var m=/^(.+):(\d+)$/.exec(e.target.getAttribute("data-rm")||"");if(!m)return;
+ var c=m[1],u=(A[c]||"").split(", ").filter(Boolean);u.splice(+m[2],1);A[c]=u.join(", ");$("fl"+c).innerHTML=fl(qOf(c));if(PART==2)q_(c)});
+function check(){document.querySelectorAll(".bad").forEach(function(x){x.classList.remove("bad")});
+ for(var i=0;i<shown.length;i++)for(var j=0;j<shown[i].qs.length;j++){var q=shown[i].qs[j],v=A[q.c],bad="";
+  if(q.req&&!v)bad="Complete: "+q.title;else if(/^Correo/.test(q.title)&&v&&!/^\S+@\S+\.\S+$/.test(v))bad="Correo electrónico no válido";
+  if(bad){var w=$("w"+q.c);w.classList.add("bad");w.scrollIntoView({block:"center"});return bad}}return""}
+function done(h){$("box").innerHTML='<div class="c">'+h+'</div>';$("fin").style.display="none";$("lk").style.display="none";scrollTo(0,0)}
+$("nx").onclick=function(){var b=$("nx"),er=$("er");er.textContent="";var bad=check();if(bad){er.textContent=bad;return}b.disabled=true;
+ if(PART==1)return rpc("api_crear",A).then(function(r){done('<h2>Se registró tu PQRS</h2><p>Código: <b>'+E(r.codigo)+'</b></p><p>Gracias. El equipo de Labtronics dará seguimiento.</p>')},
+  function(x){b.disabled=false;er.textContent="No se pudo registrar: "+(x.message||x)});
+ flush().then(function(){return rpc("api_finalizar",R,COD)}).then(function(r){if(r.ok)done('<h2>PQRS finalizada</h2><p>La PQRS <b>'+E(r.codigo)+'</b> fue cerrada y se envió el correo con el PDF.</p>');else{b.disabled=false;er.textContent=r.msg}},
+  function(x){b.disabled=false;er.textContent=String(x.message||x)})};
+function gate(){var q=sec(7).qs[0];$("gate").innerHTML='<div class="c"><h2>'+E(sec(7).title)+'</h2><div class="q"><label>'+E(q.title)+'</label><input id="cd" type="password" autocomplete="off"></div><div class="e" id="e2"></div><button id="gb">Entrar</button></div>';
+ var go=function(){var c=$("cd").value;$("gb").disabled=true;rpc("api_entrar",R,c).then(function(r){COD=c;A=r.v;$("gate").innerHTML="";var l=$("lk");l.style.display="block";
+  l.innerHTML='Enlace para retomar esta PQRS (tu avance se guarda solo):<br><b>'+E(r.url)+'</b>';PART=2;$("nx").textContent="Finalizar y enviar cierre";sync(true)},
+  function(x){$("gb").disabled=false;$("e2").textContent=(x&&x.message)||"No se pudo conectar con el servidor"})};
+ $("gb").onclick=go;$("cd").onkeydown=function(e){if(e.key=="Enter")go()}}
+fetch("/api/schema").then(function(r){return r.json()}).then(function(s){S=s;ACT=S.secs.filter(function(x){return x.loop})[0].qs;if(R){PART=2;gate()}else sync()});
+</script></body></html>
