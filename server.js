@@ -107,6 +107,53 @@ async function storageDownload(key) {
     contentType: data.type || 'application/octet-stream'
   };
 }
+function archivosDePQRS(x) {
+  const archivos = new Set();
+
+  // Identificar los archivos adjuntos guardados en las respuestas.
+  const respuestas = x.d || {};
+
+  for (const valor of Object.values(respuestas)) {
+    if (typeof valor !== 'string') continue;
+
+    const coincidencias = valor.matchAll(/\/f\/([^,\s]+)/g);
+
+    for (const coincidencia of coincidencias) {
+      try {
+        const key = decodeURIComponent(coincidencia[1]);
+
+        // Solo incluir archivos adjuntos generados por esta aplicación.
+        if (key.startsWith('archivo-')) {
+          archivos.add(key);
+        }
+      } catch (_) {
+        // Ignorar enlaces que no se puedan interpretar.
+      }
+    }
+  }
+
+  // Incluir el PDF de cierre, si existe.
+  archivos.add(`pdf-${x.id}.pdf`);
+
+  return [...archivos];
+}
+
+async function eliminarArchivosPQRS(registros) {
+  const archivos = [
+    ...new Set(registros.flatMap(archivosDePQRS))
+  ];
+
+  // Supabase permite eliminar varios objetos por solicitud.
+  for (let i = 0; i < archivos.length; i += 100) {
+    const lote = archivos.slice(i, i + 100);
+
+    const { error } = await supabase.storage
+      .from(BUCKET)
+      .remove(lote);
+
+    fail(error);
+  }
+}
 async function pdf(x) {
   const browser = await puppeteer.launch({ args: ['--no-sandbox'], executablePath: E.PUPPETEER_EXECUTABLE_PATH || undefined });
   try {
@@ -117,21 +164,91 @@ async function pdf(x) {
     return buffer;
   } finally { await browser.close(); }
 }
+
 async function enviar(x, nueva, pdfBuffer) {
-  const area = x.d[10] || '', r = RUTAS[area] || [''];
-  const options = {
-    from: E.MAIL_FROM || E.SMTP_USER,
-    to: [r[0], 'asistentecomercial@labtronics.net'].filter(Boolean).join(','),
-    cc: r[1] || '',
-    subject: nueva ? `Codigo PQRS ${x.codigo} de tipo: ${area || 'Sin tipo'}` : `Se finalizo la PQRS ${x.codigo}${x.d[4] ? ' - ' + x.d[4] : ''}`,
-    text: cuerpo(x, nueva)
+  const area = x.d[10] || '';
+  const r = RUTAS[area] || [''];
+
+  const destinatarios = [
+    r[0],
+    'asistentecomercial@labtronics.net'
+  ]
+    .filter(Boolean)
+    .join(',')
+    .split(',')
+    .map(email => email.trim())
+    .filter(Boolean)
+    .map(email => ({ email }));
+
+  const copias = (r[1] || '')
+    .split(',')
+    .map(email => email.trim())
+    .filter(Boolean)
+    .map(email => ({ email }));
+
+  const asunto = nueva
+    ? `Codigo PQRS ${x.codigo} de tipo: ${area || 'Sin tipo'}`
+    : `Se finalizo la PQRS ${x.codigo}${x.d[4] ? ' - ' + x.d[4] : ''}`;
+
+  let texto = cuerpo(x, nueva);
+
+  const mensaje = {
+    sender: {
+      name: E.BREVO_SENDER_NAME || 'Labtronics SAS',
+      email: E.BREVO_SENDER_EMAIL
+    },
+    to: destinatarios,
+    subject: asunto,
+    textContent: texto
   };
-  if (!nueva) {
-    options.attachments = [{ filename: `Cierre_${x.codigo}.pdf`, content: pdfBuffer }];
-    options.text += `Al final encontrara el PDF de la PQRS en el siguiente enlace:\n${BASE}/pdf/${x.id}.pdf\n\n`;
+
+  if (copias.length) {
+    mensaje.cc = copias;
   }
-  await mail.sendMail(options);
+
+  if (!nueva && pdfBuffer) {
+    mensaje.attachment = [{
+      name: `Cierre_${x.codigo}.pdf`,
+      content: pdfBuffer.toString('base64')
+    }];
+
+    mensaje.textContent +=
+      `\nAl final encontrara el PDF de la PQRS en el siguiente enlace:\n${BASE}/pdf/${x.id}.pdf\n`;
+  }
+
+  if (!E.BREVO_API_KEY) {
+    throw new Error('Falta configurar BREVO_API_KEY.');
+  }
+
+  if (!E.BREVO_SENDER_EMAIL) {
+    throw new Error('Falta configurar BREVO_SENDER_EMAIL.');
+  }
+
+  const respuesta = await fetch(
+    'https://api.brevo.com/v3/smtp/email',
+    {
+      method: 'POST',
+      headers: {
+        'accept': 'application/json',
+        'api-key': E.BREVO_API_KEY,
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify(mensaje)
+    }
+  );
+
+  if (!respuesta.ok) {
+    const detalle = await respuesta.text();
+    throw new Error(`Brevo respondió ${respuesta.status}: ${detalle}`);
+  }
+
+  const resultado = await respuesta.json();
+
+  console.log('Correo enviado por Brevo:', resultado.messageId);
+
+  return resultado;
 }
+
 async function filas() {
   const { data, error } = await supabase.from('p').select('*').order('num', { ascending: true });
   fail(error);
@@ -297,6 +414,100 @@ const adm = (req, res, next) => {
 };
 app.get('/admin', adm, (req, res) => res.sendFile(path.resolve('admin.html')));
 app.get('/admin/data', adm, async (req, res) => { try { res.json(await filas()); } catch (e) { res.status(500).json({ error: e.message }); } });
+// Eliminar una PQRS sin modificar el consecutivo.
+app.post('/admin/delete', adm, async (req, res) => {
+  try {
+    const id = String(req.body.id || '').trim();
+
+    if (!id) {
+      return res.status(400).json({ error: 'Falta el identificador de la PQRS.' });
+    }
+
+    const registro = await get(id);
+
+    // Primero eliminar los archivos relacionados.
+    await eliminarArchivosPQRS([registro]);
+
+    // Después eliminar el registro.
+    const { error } = await supabase
+      .from('p')
+      .delete()
+      .eq('id', registro.id);
+
+    fail(error);
+
+    res.json({ ok: true, mensaje: `Se eliminó ${registro.codigo}.` });
+
+  } catch (e) {
+    console.error('Error eliminando PQRS:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+
+// Eliminar todas las PQRS y reiniciar el consecutivo.
+app.post('/admin/delete-all', adm, async (req, res) => {
+  try {
+    const confirmacion = String(req.body.confirmacion || '');
+
+    if (confirmacion !== 'ELIMINAR') {
+      return res.status(400).json({
+        error: 'Confirmación no válida.'
+      });
+    }
+
+    // Consultar todos los registros por páginas.
+    const registros = [];
+    let desde = 0;
+    const tamano = 1000;
+
+    while (true) {
+      const { data, error } = await supabase
+        .from('p')
+        .select('id, d')
+        .order('num', { ascending: true })
+        .range(desde, desde + tamano - 1);
+
+      fail(error);
+
+      registros.push(...(data || []));
+
+      if (!data || data.length < tamano) break;
+
+      desde += tamano;
+    }
+
+    // Eliminar adjuntos y PDF relacionados.
+    await eliminarArchivosPQRS(registros);
+
+    // Eliminar todos los registros de PQRS.
+    const { error: errorEliminar } = await supabase
+      .from('p')
+      .delete()
+      .gte('num', 1);
+
+    fail(errorEliminar);
+
+    // Reiniciar el consecutivo para que la siguiente sea PQRS-0001.
+    const { error: errorContador } = await supabase
+      .from('configuracion_pqrs')
+      .update({ siguiente_numero: 1 })
+      .eq('id', true);
+
+    fail(errorContador);
+
+    res.json({
+      ok: true,
+      eliminadas: registros.length,
+      siguiente_numero: 1,
+      mensaje: 'Se eliminaron las PQRS y se reinició el consecutivo.'
+    });
+
+  } catch (e) {
+    console.error('Error eliminando todas las PQRS:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
 app.post('/admin/set', adm, async (req, res) => {
   try {
     const { id, k, v } = req.body;

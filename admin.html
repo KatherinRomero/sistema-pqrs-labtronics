@@ -1,33 +1,352 @@
-<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Consolidado PQRS</title><meta name="viewport" content="width=device-width,initial-scale=1">
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Consolidado PQRS</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+
 <style>
-body{margin:0;font:13px Arial,sans-serif;background:#eef3f8;color:#1b1f24}header{position:sticky;left:0;display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:12px 16px;background:#1f3b5c;color:#fff}
-h1{font-size:16px;margin:0;flex:1}.config{display:flex;align-items:center;gap:6px;background:#fff;color:#1f3b5c;padding:6px 8px;border-radius:5px}.config input{width:85px}.config button{padding:7px 10px;border:0;border-radius:4px;background:#d8e8ff;color:#0c3b76;font-weight:bold;cursor:pointer}.msg{font-size:12px;color:#fff;width:100%}input,select{padding:6px;border-radius:4px;border:1px solid #b9c7d6}a.b{background:#fff;color:#1f3b5c;padding:7px 14px;border-radius:4px;text-decoration:none;font-weight:bold}
-.t{overflow:auto;max-height:calc(100vh - 62px)}table{border-collapse:collapse;min-width:2000px;background:#fff}th{position:sticky;top:0;background:#d8e8ff;color:#0c3b76;font-size:11px;text-transform:uppercase;padding:8px;border:1px solid #b8cfe9;z-index:1}
-td{border:1px solid #d8e2ee;padding:6px 8px;vertical-align:top;white-space:pre-wrap;max-width:300px;word-break:break-word}tr:hover td{background:#f6faff}.A{color:#b26a00;font-weight:bold}.C{color:#137333;font-weight:bold}td select{width:100%}
-</style></head><body><header><h1>CONSOLIDADO DE QUEJAS, RECLAMOS Y SUGERENCIAS</h1><input id="s" placeholder="Buscar…"><select id="f"><option value="">Todos</option><option>Abierto</option><option>Cerrado</option></select><span id="n"></span><a class="b" href="/admin/excel">Descargar Excel</a><div class="config"><label for="inicio">Próximo número PQRS:</label><input id="inicio" type="number" min="1" step="1"><button id="guardarInicio">Guardar</button></div><span class="msg" id="configMsg"></span></header>
-<div class="t"><table><thead><tr id="h"></tr></thead><tbody id="b"></tbody></table></div>
+body{margin:0;font:13px Arial,sans-serif;background:#eef3f8;color:#1b1f24}
+header{position:sticky;left:0;display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:12px 16px;background:#1f3b5c;color:#fff}
+h1{font-size:16px;margin:0;flex:1}
+.config{display:flex;align-items:center;gap:6px;background:#fff;color:#1f3b5c;padding:6px 8px;border-radius:5px}
+.config input{width:85px}
+.config button{padding:7px 10px;border:0;border-radius:4px;background:#d8e8ff;color:#0c3b76;font-weight:bold;cursor:pointer}
+.msg{font-size:12px;color:#fff;width:100%}
+input,select{padding:6px;border-radius:4px;border:1px solid #b9c7d6}
+a.b{background:#fff;color:#1f3b5c;padding:7px 14px;border-radius:4px;text-decoration:none;font-weight:bold}
+button{cursor:pointer}
+.danger{background:#b42318;color:#fff;border:0;border-radius:4px;padding:8px 12px;font-weight:bold}
+.delete-btn{background:#b42318;color:#fff;border:0;border-radius:4px;padding:6px 9px;font-weight:bold}
+.danger:hover,.delete-btn:hover{background:#8f1d14}
+.t{overflow:auto;max-height:calc(100vh - 62px)}
+table{border-collapse:collapse;min-width:2100px;background:#fff}
+th{position:sticky;top:0;background:#d8e8ff;color:#0c3b76;font-size:11px;text-transform:uppercase;padding:8px;border:1px solid #b8cfe9;z-index:1}
+td{border:1px solid #d8e2ee;padding:6px 8px;vertical-align:top;white-space:pre-wrap;max-width:300px;word-break:break-word}
+tr:hover td{background:#f6faff}
+.A{color:#b26a00;font-weight:bold}
+.C{color:#137333;font-weight:bold}
+td select{width:100%}
+</style>
+</head>
+
+<body>
+<header>
+<h1>CONSOLIDADO DE QUEJAS, RECLAMOS Y SUGERENCIAS</h1>
+
+<input id="s" placeholder="Buscar…">
+
+<select id="f">
+<option value="">Todos</option>
+<option>Abierto</option>
+<option>Cerrado</option>
+</select>
+
+<span id="n"></span>
+
+<a class="b" href="/admin/excel">Descargar Excel</a>
+
+<div class="config">
+<label for="inicio">Próximo número PQRS:</label>
+<input id="inicio" type="number" min="1" step="1">
+<button id="guardarInicio">Guardar</button>
+</div>
+
+<button class="danger" id="eliminarTodas">Eliminar todas las PQRS</button>
+
+<span class="msg" id="configMsg"></span>
+</header>
+
+<div class="t">
+<table>
+<thead>
+<tr id="h"></tr>
+</thead>
+<tbody id="b"></tbody>
+</table>
+</div>
+
 <script>
-var C=[["No","no"],["Fecha","fecha"],["Tipo","tipo"],["Nombre del cliente","cliente"],["Proceso responsable","proceso"],["Descripción de la PQRS","descripcion"],["Primer contacto con el cliente","contacto"],["Investigación / causas probables","investigacion"],["Procedente","procedente"],["Solución de la PQRS (acciones ejecutadas)","solucion"],["Fecha de solución","fechaSol"],["Estado","estado"],["Calificación de la gestión","cal"],["Requiere acción","acc"],["Tiempo de solución (días)","dias"],["Trazabilidad","link"]];
-var OP={cal:["","Excelente","Buena","Regular","Mala"],acc:["","Ninguna","Correctiva","Preventiva"]},D=[];
-var E=function(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})};
-document.getElementById("h").innerHTML=C.map(function(c){return"<th>"+c[0]+"</th>"}).join("");
-function cell(r,k){var v=r[k];
- if(k=="fecha")return v?new Date(v).toLocaleString("es-CO"):"";
- if(k=="estado")return'<span class="'+v[0]+'">'+v+'</span>'+(r.pdf?' · <a href="'+E(r.pdf)+'" target="_blank">PDF</a>':'');
- if(k=="link")return'<a href="'+E(v)+'" target="_blank">Abrir</a>';
- if(OP[k])return'<select data-i="'+r.id+'" data-k="'+k+'">'+OP[k].map(function(o){return'<option'+(o==v?" selected":"")+'>'+o+'</option>'}).join("")+'</select>';
- return E(v)}
-function draw(){var q=document.getElementById("s").value.toLowerCase(),f=document.getElementById("f").value;
- var R=D.filter(function(r){return(!f||r.estado==f)&&(!q||JSON.stringify(r).toLowerCase().indexOf(q)>=0)});
- document.getElementById("n").textContent=R.length+" PQRS";
- document.getElementById("b").innerHTML=R.slice().reverse().map(function(r){return"<tr>"+C.map(function(c){return"<td>"+cell(r,c[1])+"</td>"}).join("")+"</tr>"}).join("")}
-function load(){if(document.activeElement&&document.activeElement.tagName=="SELECT"&&document.activeElement.dataset.k)return;
- fetch("/admin/data").then(function(r){return r.json()}).then(function(d){D=d;draw()})}
-document.getElementById("s").oninput=draw;document.getElementById("f").onchange=draw;
-document.getElementById("b").onchange=function(e){var t=e.target;if(!t.dataset.k)return;
- fetch("/admin/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:t.dataset.i,k:t.dataset.k,v:t.value})});
- D.forEach(function(r){if(r.id==t.dataset.i)r[t.dataset.k]=t.value})};
-function cargarConfig(){fetch("/admin/config").then(function(r){if(!r.ok)throw Error("No se pudo consultar la configuración");return r.json()}).then(function(d){document.getElementById("inicio").value=d.siguiente_numero}).catch(function(e){document.getElementById("configMsg").textContent=e.message})}
-document.getElementById("guardarInicio").onclick=function(){var n=Number(document.getElementById("inicio").value),m=document.getElementById("configMsg");if(!Number.isSafeInteger(n)||n<1){m.textContent="Ingresa un entero mayor que cero.";return}fetch("/admin/config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({siguiente_numero:n})}).then(function(r){return r.json().then(function(d){if(!r.ok)throw Error(d.error||"No se pudo guardar");return d})}).then(function(d){m.textContent="Guardado. La próxima PQRS será " + "PQRS-" + String(d.siguiente_numero).padStart(4,"0")}).catch(function(e){m.textContent=e.message})};
-load();cargarConfig();setInterval(load,20000);
-</script></body></html>
+var C=[
+["No","no"],
+["Fecha","fecha"],
+["Tipo","tipo"],
+["Nombre del cliente","cliente"],
+["Proceso responsable","proceso"],
+["Descripción de la PQRS","descripcion"],
+["Primer contacto con el cliente","contacto"],
+["Investigación / causas probables","investigacion"],
+["Procedente","procedente"],
+["Solución de la PQRS (acciones ejecutadas)","solucion"],
+["Fecha de solución","fechaSol"],
+["Estado","estado"],
+["Calificación de la gestión","cal"],
+["Requiere acción","acc"],
+["Tiempo de solución (días)","dias"],
+["Trazabilidad","link"],
+["Acciones","acciones"]
+];
+
+var OP={
+cal:["","Excelente","Buena","Regular","Mala"],
+acc:["","Ninguna","Correctiva","Preventiva"]
+};
+
+var D=[];
+
+var E=function(s){
+return String(s==null?"":s).replace(/[&<>"]/g,function(c){
+return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];
+});
+};
+
+document.getElementById("h").innerHTML=C.map(function(c){
+return "<th>"+c[0]+"</th>";
+}).join("");
+
+function cell(r,k){
+var v=r[k];
+
+if(k=="fecha")
+return v?new Date(v).toLocaleString("es-CO"):"";
+
+if(k=="estado")
+return '<span class="'+v[0]+'">'+v+'</span>'+
+(r.pdf?' · <a href="'+E(r.pdf)+'" target="_blank">PDF</a>':'');
+
+if(k=="link")
+return '<a href="'+E(v)+'" target="_blank">Abrir</a>';
+
+if(k=="acciones")
+return '<button class="delete-btn" data-delete-id="'+E(r.id)+'">Eliminar</button>';
+
+if(OP[k])
+return '<select data-i="'+E(r.id)+'" data-k="'+k+'">'+
+OP[k].map(function(o){
+return '<option'+(o==v?" selected":"")+'>'+o+'</option>';
+}).join("")+
+'</select>';
+
+return E(v);
+}
+
+function draw(){
+var q=document.getElementById("s").value.toLowerCase();
+var f=document.getElementById("f").value;
+
+var R=D.filter(function(r){
+return (!f||r.estado==f)&&
+(!q||JSON.stringify(r).toLowerCase().indexOf(q)>=0);
+});
+
+document.getElementById("n").textContent=R.length+" PQRS";
+
+document.getElementById("b").innerHTML=R.slice().reverse().map(function(r){
+return "<tr>"+
+C.map(function(c){
+return "<td>"+cell(r,c[1])+"</td>";
+}).join("")+
+"</tr>";
+}).join("");
+}
+
+function load(){
+if(document.activeElement&&
+document.activeElement.tagName=="SELECT"&&
+document.activeElement.dataset.k)return;
+
+fetch("/admin/data")
+.then(function(r){
+if(!r.ok)throw Error("No se pudieron cargar las PQRS");
+return r.json();
+})
+.then(function(d){
+D=d;
+draw();
+})
+.catch(function(e){
+document.getElementById("configMsg").textContent=e.message;
+});
+}
+
+document.getElementById("s").oninput=draw;
+document.getElementById("f").onchange=draw;
+
+document.getElementById("b").onchange=function(e){
+var t=e.target;
+if(!t.dataset.k)return;
+
+fetch("/admin/set",{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({
+id:t.dataset.i,
+k:t.dataset.k,
+v:t.value
+})
+})
+.then(function(r){
+if(!r.ok)throw Error("No se pudo guardar el cambio");
+D.forEach(function(r){
+if(r.id==t.dataset.i)r[t.dataset.k]=t.value;
+});
+});
+};
+
+// Eliminar una PQRS individual.
+document.getElementById("b").onclick=function(e){
+var t=e.target;
+var id=t.dataset.deleteId;
+
+if(!id)return;
+
+var registro=D.find(function(r){
+return r.id===id;
+});
+
+if(!registro)return;
+
+if(!confirm(
+"¿Está seguro de eliminar la "+registro.no+
+"?\n\nTambién se eliminarán sus archivos adjuntos y su PDF.\n\nEsta acción no se puede deshacer."
+))return;
+
+t.disabled=true;
+t.textContent="Eliminando...";
+
+fetch("/admin/delete",{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({id:id})
+})
+.then(function(r){
+return r.json().then(function(d){
+if(!r.ok)throw Error(d.error||"No se pudo eliminar la PQRS");
+return d;
+});
+})
+.then(function(d){
+D=D.filter(function(r){
+return r.id!==id;
+});
+draw();
+document.getElementById("configMsg").textContent=d.mensaje;
+})
+.catch(function(e){
+alert(e.message);
+load();
+});
+};
+
+// Consultar el consecutivo actual.
+function cargarConfig(){
+fetch("/admin/config")
+.then(function(r){
+if(!r.ok)throw Error("No se pudo consultar la configuración");
+return r.json();
+})
+.then(function(d){
+document.getElementById("inicio").value=d.siguiente_numero;
+})
+.catch(function(e){
+document.getElementById("configMsg").textContent=e.message;
+});
+}
+
+// Guardar el consecutivo manualmente.
+document.getElementById("guardarInicio").onclick=function(){
+var n=Number(document.getElementById("inicio").value);
+var m=document.getElementById("configMsg");
+
+if(!Number.isSafeInteger(n)||n<1){
+m.textContent="Ingresa un entero mayor que cero.";
+return;
+}
+
+fetch("/admin/config",{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({siguiente_numero:n})
+})
+.then(function(r){
+return r.json().then(function(d){
+if(!r.ok)throw Error(d.error||"No se pudo guardar");
+return d;
+});
+})
+.then(function(d){
+m.textContent="Guardado. La próxima PQRS será PQRS-"+
+String(d.siguiente_numero).padStart(4,"0");
+})
+.catch(function(e){
+m.textContent=e.message;
+});
+};
+
+// Eliminar todas las PQRS.
+document.getElementById("eliminarTodas").onclick=function(){
+var m=document.getElementById("configMsg");
+
+if(!D.length){
+alert("No hay PQRS registradas para eliminar.");
+return;
+}
+
+if(!confirm(
+"¡ATENCIÓN!\n\nSe eliminarán TODAS las PQRS, sus archivos adjuntos y sus PDF.\n\nEl consecutivo se reiniciará a PQRS-0001.\n\nEsta acción es irreversible."
+))return;
+
+var palabra=prompt(
+"Para confirmar la eliminación total, escribe exactamente: ELIMINAR"
+);
+
+if(palabra!=="ELIMINAR"){
+alert("Operación cancelada. No se eliminó ningún registro.");
+return;
+}
+
+var boton=document.getElementById("eliminarTodas");
+boton.disabled=true;
+boton.textContent="Eliminando...";
+
+fetch("/admin/delete-all",{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({confirmacion:"ELIMINAR"})
+})
+.then(function(r){
+return r.json().then(function(d){
+if(!r.ok)throw Error(d.error||"No se pudieron eliminar las PQRS");
+return d;
+});
+})
+.then(function(d){
+D=[];
+draw();
+
+document.getElementById("inicio").value=1;
+
+m.textContent=
+d.mensaje+" Registros eliminados: "+d.eliminadas+
+". Próxima PQRS: PQRS-0001.";
+
+})
+.catch(function(e){
+alert(e.message);
+load();
+cargarConfig();
+})
+.finally(function(){
+boton.disabled=false;
+boton.textContent="Eliminar todas las PQRS";
+});
+};
+
+load();
+cargarConfig();
+setInterval(load,20000);
+</script>
+
+</body>
+</html>
