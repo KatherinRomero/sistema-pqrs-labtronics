@@ -7,8 +7,8 @@ input[type=text],input[type=email],input[type=date],input[type=password],textare
 .o{display:block;font-weight:400;margin:4px 0}button{background:#1f3b5c;color:#fff;border:0;border-radius:4px;padding:11px 24px;font:inherit;cursor:pointer}button:disabled{opacity:.5}
 .n{display:flex;justify-content:space-between;align-items:center;margin-bottom:40px}.e{color:#c5221f;margin:8px 0}#st{font-size:12px;color:#4f6576}
 .lk{background:#f3f8ff;border:1px solid #d8e2ee;border-radius:6px;padding:8px;font-size:12px;word-break:break-all;margin-bottom:12px}.x{color:#c5221f;cursor:pointer;margin-left:8px}.bad{outline:2px solid #c5221f}
-</style></head><body><div id="w"><div id="gate"></div><div id="lk" class="lk" style="display:none"></div><div id="box"></div>
-<div id="fin" style="display:none"><div class="e" id="er"></div><div class="n"><span id="st"></span><button id="nx">Enviar PQRS</button></div></div></div>
+</style></head><body><div id="w"><div id="gate"></div><div id="lk" class="lk" style="display:none"></div><div id="st"></div><div id="box"></div>
+<div id="fin" style="display:none"><div class="e" id="er"></div><div class="n"><button id="nx">Enviar PQRS</button></div></div></div>
 <script>
 var S,R=(function(m){return m?m[1].toUpperCase():new URLSearchParams(location.search).get("r")||""})(/^\/(pqrs-\d+)\/?$/i.exec(location.pathname)),A={},COD="",PART=1,pend={},tm,ACT;
 var $=function(i){return document.getElementById(i)},E=function(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})};
@@ -43,14 +43,43 @@ function sync(init){var r=path(PART==1?1:8),box=$("box"),keep={},first=null;
  if(init)box.lastChild&&box.lastChild.scrollIntoView();else if(first)first.scrollIntoView({behavior:"smooth",block:"start"})}
 function st(t){$("st").textContent=t}
 function cc(x){return/^\d+$/.test(x)?+x:x}
-function q_(c){pend[c]=1;clearTimeout(tm);st("Guardando…");tm=setTimeout(flush,600)}
-function flush(){clearTimeout(tm);var ks=Object.keys(pend);pend={};if(!ks.length)return Promise.resolve();
- return ks.reduce(function(p,c){return p.then(function(){return rpc("api_guardar",R,COD,cc(c),A[c]||"")})},Promise.resolve())
- .then(function(){st("Guardado ✓")},function(){ks.forEach(function(c){pend[c]=1});st("Sin conexión: reintentando…");tm=setTimeout(flush,3000)})}
+function q_(c){
+ // Guarda el valor más reciente por campo y agrupa la escritura mientras se escribe.
+ pend[c]=A[c]||"";
+ clearTimeout(tm);
+ st("Guardando…");
+ tm=setTimeout(function(){flush().catch(function(){})},600)
+}
+var saving=null;
+function flush(){
+ clearTimeout(tm);
+ // Espera el envío actual antes de iniciar otro para evitar que un valor viejo sobrescriba uno nuevo.
+ if(saving)return saving.then(function(){return Object.keys(pend).length?flush():undefined});
+ // Separa los cambios enviados de los que puedan llegar mientras se procesa la petición.
+ var changes=pend,ks=Object.keys(changes);
+ pend={};
+ if(!ks.length)return Promise.resolve();
+ var request=ks.reduce(function(p,c){
+  return p.then(function(){return rpc("api_guardar",R,COD,cc(c),changes[c])})
+ },Promise.resolve());
+ saving=request.then(function(){
+  saving=null;
+  st("Guardado ✓");
+  return Object.keys(pend).length?flush():undefined
+ },function(x){
+  // Conserva los cambios fallidos, pero da prioridad a cualquier edición posterior del mismo campo.
+  ks.forEach(function(c){if(!Object.prototype.hasOwnProperty.call(pend,c))pend[c]=changes[c]});
+  saving=null;
+  st("No se pudo guardar. Se reintentará automáticamente.");
+  tm=setTimeout(function(){flush().catch(function(){})},3000);
+  throw x
+ });
+ return saving
+}
 $("box").addEventListener("input",function(e){var t=e.target,m=/^q(.+)$/.exec(t.id||t.name||"");if(!m||t.type=="file")return;var c=m[1];A[c]=t.value;
  if(PART==2)q_(c);if(t.type=="radio")sync()});
 $("box").addEventListener("change",function(e){var t=e.target;
- if(t.type!="file"){var m=/^q(.+)$/.exec(t.id||t.name||"");if(m&&PART==2){var c=m[1];A[c]=t.value;q_(c);flush()}return}
+ if(t.type!="file"){var m=/^q(.+)$/.exec(t.id||t.name||"");if(m&&PART==2){var c=m[1];A[c]=t.value;q_(c);flush().catch(function(){})}return}
  var c=t.id.slice(1),q=qOf(c),ch=Promise.resolve();
  [].slice.call(t.files).forEach(function(f){ch=ch.then(function(){var n=(A[c]||"").split(", ").filter(Boolean).length;if(n>=q.max)throw"Máximo "+q.max+" archivo(s)";st("Subiendo "+f.name+"…");
   return new Promise(function(ok,ko){var r=new FileReader;r.onload=function(){ok(r.result.split(",")[1])};r.onerror=ko;r.readAsDataURL(f)})})

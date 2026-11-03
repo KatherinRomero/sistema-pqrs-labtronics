@@ -1,3 +1,1 @@
-{"name":"pqrs-web","version":"1.0.0","private":true,"engines":{"node":">=20.6"},
-"scripts":{"start":"node --env-file=.env server.js","importar":"node --env-file=.env import.js"},
-"dependencies":{"better-sqlite3":"^11.0.0","exceljs":"^4.4.0","express":"^4.19.0","nodemailer":"^6.9.0","puppeteer":"^23.0.0"}}
+{"name":"pqrs-web","version":"1.0.0","private":true,"engines":{"node":">=20.6"},"scripts":{"start":"node --env-file=.env server.js","importar":"node --env-file=.env import.js"},"dependencies":{"@supabase/supabase-js":"^2.118.0","better-sqlite3":"^11.0.0","exceljs":"^4.4.0","express":"^4.19.0","nodemailer":"^6.9.0","puppeteer":"^23.0.0"}}
